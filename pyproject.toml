@@ -25,9 +25,9 @@ dependencies    = [
 ]
 
 [project.urls]
-Homepage   = "https://github.com/ElizatoWinston/elizato-dl"
-Repository = "https://github.com/ElizatoWinston/elizato-dl"
-Issues     = "https://github.com/ElizatoWinston/elizato-dl/issues"
+Homepage   = "https://github.com/elizatowinston-dev/elizato-dl"
+Repository = "https://github.com/elizatowinston-dev/elizato-dl"
+Issues     = "https://github.com/elizatowinston-dev/elizato-dl/issues"
 
 [project.scripts]
 elizato-dl = "elizato_dl.core:main"
