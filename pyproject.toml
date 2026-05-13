@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name            = "elizato-dl"
-version         = "1.0.0"
+version         = "1.0.1"
 description     = "YouTube Music playlist downloader with album art, metadata and lyrics"
 readme          = "README.md"
 license         = { file = "LICENSE" }
