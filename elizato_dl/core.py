@@ -465,15 +465,58 @@ def process_lyrics_for_folder(output_dir: Path, entries: list):
 
         if audio_file.suffix.lower() == ".mp3":
             embed_lyrics_mp3(audio_file, lyrics_text)
-
-        if synced:
-            write_lrc_file(audio_file, synced)
-            print("       ✅ Synced lyrics embedded + .lrc saved")
+            # Lyrics are now embedded in the file itself — no need for a
+            # separate .lrc file cluttering the folder.
+            if synced:
+                print("       ✅ Synced lyrics embedded into MP3")
+            else:
+                print("       ✅ Plain lyrics embedded into MP3 (no synced version available)")
         else:
-            print("       ✅ Plain lyrics embedded (no synced version available)")
+            # Other formats (flac, m4a, wav, opus) don't get lyrics embedded
+            # by this tool, so the .lrc file is the only way to have lyrics —
+            # keep it.
+            if synced:
+                write_lrc_file(audio_file, synced)
+                print("       ✅ Synced .lrc file saved")
+            else:
+                write_lrc_file(audio_file, plain)
+                print("       ✅ Plain .lrc file saved (no synced version available)")
+
         success += 1
 
     print(f"\n  Lyrics done — {success} added, {failed} not found.\n")
+
+
+def cleanup_stray_files(output_dir: Path):
+    """
+    Remove leftover thumbnail images and any orphaned .lrc files whose
+    matching audio file no longer exists (e.g. from a previous failed run).
+    """
+    removed = 0
+
+    # Leftover thumbnail images (jpg/jpeg/png/webp) sitting loose in the folder
+    for ext in ("*.jpg", "*.jpeg", "*.png", "*.webp"):
+        for img in output_dir.glob(ext):
+            try:
+                img.unlink()
+                removed += 1
+            except Exception:
+                pass
+
+    # Orphaned .lrc files with no matching audio file
+    for lrc in output_dir.glob("*.lrc"):
+        has_audio = any(
+            lrc.with_suffix(f".{fmt}").exists() for fmt in SUPPORTED_FORMATS
+        )
+        if not has_audio:
+            try:
+                lrc.unlink()
+                removed += 1
+            except Exception:
+                pass
+
+    if removed:
+        print(f"🧹 Cleaned up {removed} leftover file(s) (thumbnails/orphaned lyrics)\n")
 
 # ---------------------------------------------------------------------------
 # Fetch
@@ -580,7 +623,7 @@ def build_ytdlp_cmd(urls: list, output_dir: Path, fmt: str,
     ]
 
     if embed_thumbnail:
-        cmd += ["--embed-thumbnail", "--write-thumbnail"]
+        cmd += ["--embed-thumbnail"]
 
     if cookies_file:
         cmd += ["--cookies", cookies_file]
@@ -653,6 +696,8 @@ def cmd_download(args):
 
     if args.lyrics:
         process_lyrics_for_folder(output_dir, entries)
+
+    cleanup_stray_files(output_dir)
 
     print(DONATION_MSG)
 
