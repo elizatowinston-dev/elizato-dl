@@ -1,0 +1,17 @@
+name: elizato_mobile
+description: Secure thin client for the self-hosted elizato-dl API.
+publish_to: none
+version: 0.1.0+1
+environment: {sdk: '>=3.3.0 <4.0.0'}
+dependencies:
+  flutter: {sdk: flutter}
+  http: ^1.2.2
+  flutter_secure_storage: ^9.2.2
+  file_picker: ^8.1.2
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
+  receive_sharing_intent: ^1.8.1
+  just_audio: ^0.9.40
+  audio_session: ^0.1.21
+  open_filex: ^4.5.0
+flutter: {uses-material-design: true}

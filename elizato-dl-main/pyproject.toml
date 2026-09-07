@@ -1,0 +1,37 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name            = "elizato-dl"
+version         = "1.3.0"
+description     = "YouTube Music playlist downloader with album art, metadata and lyrics"
+readme          = "README.md"
+license         = { file = "LICENSE" }
+authors         = [{ name = "Elizato Winston" }]
+requires-python = ">=3.10"
+keywords        = ["youtube", "music", "downloader", "lyrics", "mp3", "playlist"]
+classifiers     = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies    = [
+    "yt-dlp>=2024.1.1",
+    "mutagen>=1.47.0",
+    "requests>=2.31.0",
+]
+
+[project.urls]
+Homepage   = "https://github.com/elizatowinston-dev/elizato-dl"
+Repository = "https://github.com/elizatowinston-dev/elizato-dl"
+Issues     = "https://github.com/elizatowinston-dev/elizato-dl/issues"
+
+[project.scripts]
+elizato-dl = "elizato_dl.core:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["elizato_dl*"]
