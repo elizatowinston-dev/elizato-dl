@@ -7,6 +7,7 @@ Made by Elizato Winston
 import argparse
 import json
 import platform
+import random
 import re
 import shutil
 import socket
@@ -886,20 +887,17 @@ def cmd_fetch(args):
 # Download
 # ---------------------------------------------------------------------------
 
-def build_ytdlp_cmd(urls: list, output_dir: Path, fmt: str,
-                    embed_thumbnail: bool, browser: str, cookies_file: str,
-                    start_track_number: int = 1) -> list:
+def build_ytdlp_base_cmd(output_dir: Path, fmt: str,
+                         embed_thumbnail: bool, browser: str, cookies_file: str) -> list:
     """
-    Build the yt-dlp command.
+    Build the shared yt-dlp flags used for every track download.
 
-    start_track_number lets us continue numbering correctly when downloading
-    is split into batches (kept at 1 for a normal single-run download).
-
-    Track numbers are filled in from the playlist position so music apps
-    sort tracks in the artist's intended album order instead of
-    alphabetically. Album art is cropped to a centered square as a
-    fallback for any track where we couldn't fetch a proper high-res
-    square thumbnail ourselves beforehand.
+    Note: track numbers are NOT set here. yt-dlp's %(playlist_index)s only
+    exists when yt-dlp itself is given a playlist URL and walks it in order.
+    Our manifest workflow instead downloads individual video URLs one at a
+    time (so we can check each for a clean-audio swap first), so there is
+    no playlist context for yt-dlp to count against. Track numbers are
+    injected per-track as a literal value in build_ytdlp_track_cmd instead.
     """
     cmd = [
         sys.executable, "-m", "yt_dlp",
@@ -908,22 +906,18 @@ def build_ytdlp_cmd(urls: list, output_dir: Path, fmt: str,
         "--audio-format",       fmt,
         "--audio-quality",      "0",
         "--add-metadata",
-        "--parse-metadata",     "playlist_index:%(track_number)s",
         "--output",             str(output_dir / "%(artist,uploader)s - %(title)s.%(ext)s"),
         "--extractor-args",     "youtube:player_client=tv,android_vr;player_skip=web_music",
         "--remote-components",  "ejs:github",
-        "--sleep-interval",     "5",
-        "--max-sleep-interval", "10",
         "--retries",            "10",
         "--fragment-retries",   "10",
         "--ignore-errors",
-        "--playlist-start",     str(start_track_number),
     ]
 
     if embed_thumbnail:
         cmd += ["--embed-thumbnail", "--convert-thumbnails", "png"]
         # Fallback square-crop: if a track didn't get a pre-fetched
-        # high-res square thumbnail swapped in (see download_highres_artwork),
+        # high-res square thumbnail swapped in (see upgrade_artwork_to_highres),
         # this crops the default padded 16:9 thumbnail to a centered square
         # before it gets embedded, so it still displays cleanly everywhere.
         cmd += [
@@ -936,6 +930,42 @@ def build_ytdlp_cmd(urls: list, output_dir: Path, fmt: str,
     elif browser:
         cmd += ["--cookies-from-browser", browser]
 
+    return cmd
+
+
+def build_ytdlp_track_cmd(base_cmd: list, url: str, track_number: int) -> list:
+    """
+    Build the final command for a single track, injecting its correct
+    track number as a literal value (rather than relying on
+    %(playlist_index)s, which isn't populated for standalone URLs).
+
+    The ":(?P<track_number>NN)" form runs a regex against an empty input
+    string to set a literal field value — a standard yt-dlp --parse-metadata
+    trick for injecting fixed text rather than extracting it from metadata.
+    """
+    track_str = f"{track_number:02d}"
+    cmd = base_cmd + [
+        "--parse-metadata", f":(?P<track_number>{track_str})",
+        url,
+    ]
+    return cmd
+
+
+def build_ytdlp_cmd(urls: list, output_dir: Path, fmt: str,
+                    embed_thumbnail: bool, browser: str, cookies_file: str,
+                    start_track_number: int = 1) -> list:
+    """
+    Legacy single-batch command builder, kept for the direct-URL download
+    path (a single playlist URL, where yt-dlp's own playlist_index works
+    fine since yt-dlp is walking the real playlist itself).
+    """
+    cmd = build_ytdlp_base_cmd(output_dir, fmt, embed_thumbnail, browser, cookies_file)
+    cmd += [
+        "--parse-metadata",     "playlist_index:%(track_number)s",
+        "--sleep-interval",     "5",
+        "--max-sleep-interval", "10",
+        "--playlist-start",     str(start_track_number),
+    ]
     cmd += urls
     return cmd
 
@@ -1000,14 +1030,37 @@ def cmd_download(args):
     print(f"Track numbers : yes (playlist order)")
     print(f"Lyrics        : {'yes' if args.lyrics else 'no'}\n")
 
-    cmd    = build_ytdlp_cmd(urls, output_dir, fmt, embed_thumbnail, args.browser, cookies_file)
-    result = subprocess.run(cmd)
+    if entries:
+        # Manifest workflow: download tracks one at a time so each one
+        # gets its own correct, explicit track number (yt-dlp's
+        # playlist_index isn't available here — see build_ytdlp_base_cmd).
+        base_cmd  = build_ytdlp_base_cmd(output_dir, fmt, embed_thumbnail, args.browser, cookies_file)
+        any_failed = False
 
-    if result.returncode == 0:
-        print(f"\n✅ Download complete! Files saved to: {output_dir.resolve()}")
+        for i, url in enumerate(urls, start=1):
+            track_cmd = build_ytdlp_track_cmd(base_cmd, url, i)
+            result    = subprocess.run(track_cmd)
+            if result.returncode != 0:
+                any_failed = True
+            if i < len(urls):
+                time.sleep(random.uniform(5, 10))
+
+        if not any_failed:
+            print(f"\n✅ Download complete! Files saved to: {output_dir.resolve()}")
+        else:
+            print(f"\n⚠️  Finished with some errors.")
+            print(f"   Successfully downloaded files are in: {output_dir.resolve()}")
     else:
-        print(f"\n⚠️  Finished with some errors (exit code {result.returncode}).")
-        print(f"   Successfully downloaded files are in: {output_dir.resolve()}")
+        # Direct playlist URL: let yt-dlp walk the real playlist itself,
+        # so its own playlist_index is valid and accurate.
+        cmd    = build_ytdlp_cmd(urls, output_dir, fmt, embed_thumbnail, args.browser, cookies_file)
+        result = subprocess.run(cmd)
+
+        if result.returncode == 0:
+            print(f"\n✅ Download complete! Files saved to: {output_dir.resolve()}")
+        else:
+            print(f"\n⚠️  Finished with some errors (exit code {result.returncode}).")
+            print(f"   Successfully downloaded files are in: {output_dir.resolve()}")
 
     if embed_thumbnail and entries:
         upgrade_artwork_to_highres(output_dir, entries, fmt)
