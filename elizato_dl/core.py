@@ -939,13 +939,14 @@ def build_ytdlp_track_cmd(base_cmd: list, url: str, track_number: int) -> list:
     track number as a literal value (rather than relying on
     %(playlist_index)s, which isn't populated for standalone URLs).
 
-    The ":(?P<track_number>NN)" form runs a regex against an empty input
-    string to set a literal field value — a standard yt-dlp --parse-metadata
-    trick for injecting fixed text rather than extracting it from metadata.
+    The "NN:(?P<track_number>.+)" form matches the literal digits NN
+    against a catch-all regex, placing them into the track_number field.
+    (The input side must actually contain the value being captured —
+    matching against an empty string can never succeed.)
     """
     track_str = f"{track_number:02d}"
     cmd = base_cmd + [
-        "--parse-metadata", f":(?P<track_number>{track_str})",
+        "--parse-metadata", f"{track_str}:(?P<track_number>.+)",
         url,
     ]
     return cmd
